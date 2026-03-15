@@ -91,7 +91,6 @@ mv dist ../server/
 
 cd ../server
 npm install
-npm install https://github.com/stufisher/node-sonos#v1.15.0-test
 npm start
 ```
 

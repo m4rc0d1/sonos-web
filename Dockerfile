@@ -1,26 +1,25 @@
-FROM node:16
+ARG GIT_REF=master
 
-RUN apt-get update && \
-    apt-get install -y git && \
-    apt-get clean autoclean && apt-get autoremove --yes && \
-    rm -rf /var/lib/apt/lists/*
+FROM alpine/git AS source
+ARG GIT_REF
+WORKDIR /src
+RUN git clone --branch ${GIT_REF} --single-branch https://github.com/m4rc0d1/sonos-web repo
 
-RUN git clone https://github.com/sonos-web/sonos-web
-
+FROM node:16 AS client-build
 WORKDIR /sonos-web/client
+COPY --from=source /src/repo/client ./
 RUN npm install && \
-    npm run build && \
-    mv dist ../server/
+    npm run build
 
-WORKDIR /sonos-web
-RUN rm -rf client
-
+FROM node:24-bookworm-slim AS runtime
 WORKDIR /sonos-web/server
-RUN npm install && \
-	npm install https://github.com/stufisher/node-sonos#v1.15.0-test && \
-    mv .env.production .env && \
+COPY --from=source /src/repo/server ./
+RUN rm -f package-lock.json && \
+    npm install && \
+    cp .env.production .env && \
     printf "\nREGION=EU\n" >> .env && \
     printf "\nENHANCE_METADATA=true\n" >> .env
+COPY --from=client-build /sonos-web/client/dist ./dist
 
 EXPOSE 5050
-CMD npm start
+CMD ["npm", "start"]

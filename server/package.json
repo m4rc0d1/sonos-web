@@ -21,7 +21,7 @@
     "js-base64": "^2.5.1",
     "serve-static": "^1.14.1",
     "socket.io": "^2.3.0",
-    "sonos": "^1.14.0",
+    "sonos": "https://codeload.github.com/bencevans/node-sonos/tar.gz/refs/tags/v1.14.3",
     "spotify-web-api-node": "^5.0.0",
     "superagent": "^8.0.0"
   },
