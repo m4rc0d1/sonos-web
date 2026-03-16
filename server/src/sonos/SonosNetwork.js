@@ -781,9 +781,10 @@ class SonosNetwork {
             const zone = {
               id: member.UUID,
               name: member.ZoneName,
+              invisible: member.Invisible === '1' || member.Invisible === 1 || member.Invisible === true,
               device: this.devices.find((device) => device.id === member.UUID),
             };
-            if (zone.device) {
+            if (zone.device && !zone.invisible) {
               const zoneGroup = zoneGroups.find((zg) => zg.id === group.ID);
               if (zone.id === group.Coordinator) {
                 zoneGroup.coordinator = zone;
