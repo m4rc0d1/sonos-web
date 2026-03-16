@@ -1,5 +1,6 @@
+const net = require('net');
 const {
-  DeviceDiscovery, Listener, SpotifyRegion, Helpers,
+  DeviceDiscovery, Listener, SpotifyRegion, Helpers, Sonos,
 } = require('sonos');
 const { NoDevicesFound } = require('./SonosNetworkErrors');
 const {
@@ -13,10 +14,18 @@ const MusicLibrary = require('./MusicLibrary');
 
 class SonosNetwork {
   constructor(socketio, timeout = 5000) {
+    const scanInitTimeout = Number(process.env.SONOS_SCAN_INIT_TIMEOUT_MS || 1500);
+    const scanConnectTimeout = Number(process.env.SONOS_SCAN_CONNECT_TIMEOUT_MS || 750);
+    const scanConcurrency = Number(process.env.SONOS_SCAN_CONCURRENCY || 8);
+    const scanPasses = Number(process.env.SONOS_SCAN_PASSES || 2);
     this.socketio = socketio;
     this.devices = [];
     this.zoneGroups = [];
     this.timeout = timeout;
+    this.scanInitTimeout = Number.isFinite(scanInitTimeout) ? scanInitTimeout : 1500;
+    this.scanConnectTimeout = Number.isFinite(scanConnectTimeout) ? scanConnectTimeout : 750;
+    this.scanConcurrency = Number.isFinite(scanConcurrency) ? scanConcurrency : 8;
+    this.scanPasses = Number.isFinite(scanPasses) ? Math.max(1, scanPasses) : 2;
     this.initializing = true;
     this.listener = Listener;
     this.musicLibrary = null;
@@ -47,6 +56,12 @@ class SonosNetwork {
   _init() {
     this.initializing = true;
     this._discover(this.timeout).then((devices) => {
+      if (!devices || devices.length === 0) {
+        this.initializing = false;
+        console.info('No Sonos devices found during discovery');
+        this.socketio.emit(NoSonosDevicesFound);
+        return;
+      }
       if (!this.musicLibrary) {
         this.musicLibrary = new MusicLibrary(devices[0]);
       }
@@ -68,6 +83,13 @@ class SonosNetwork {
       });
       // Now that we have the devices, listen for events on them
       this._listen();
+    }).catch((error) => {
+      this.initializing = false;
+      console.log(error);
+      this.socketio.emit(
+        UnknownErrorWhileRetrievingDevices,
+        JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      );
     });
   }
 
@@ -78,47 +100,190 @@ class SonosNetwork {
  * @returns {Array} All devices found on the network
  */
   async _discover() {
+    const configuredTargets = this._getConfiguredDiscoveryTargets();
+    if (configuredTargets.length > 0) {
+      console.info(
+        `Using configured Sonos discovery. SONOS_DEVICE_IPS=${process.env.SONOS_DEVICE_IPS || ''} `
+        + `SONOS_SCAN_CIDR=${process.env.SONOS_SCAN_CIDR || ''} `
+        + `SONOS_SCAN_INIT_TIMEOUT_MS=${this.scanInitTimeout} `
+        + `SONOS_SCAN_CONNECT_TIMEOUT_MS=${this.scanConnectTimeout} `
+        + `SONOS_SCAN_CONCURRENCY=${this.scanConcurrency} `
+        + `SONOS_SCAN_PASSES=${this.scanPasses}`,
+      );
+      this.socketio.emit(DiscoveringSonosDevices);
+      this.devices = await this._discoverConfiguredDevices(configuredTargets);
+      return this.devices;
+    }
+
     return new Promise((resolve) => {
       this.socketio.emit(DiscoveringSonosDevices);
       this.devices = [];
       const sonosSearch = DeviceDiscovery({ timeout: this.timeout });
 
       sonosSearch.on('DeviceAvailable', async (sonosDevice) => {
-        const device = sonosDevice;
-        device.deviceDescription().then((description) => {
-          device.name = description.roomName;
-          device.displayName = description.displayName;
-          if (process.env.REGION) {
-            if (process.env.REGION in SpotifyRegion) {
-              device.setSpotifyRegion(SpotifyRegion[process.env.REGION]);
-              console.log(`Setting spotify region to ${process.env.REGION}`);
-            } else {
-              console.error(`Specified region ${process.env.REGION} is not valid`);
-            }
-          }
-          const UUID = description.UDN.split('uuid:')[1];
-          device.id = UUID;
-          this.listener.subscribeTo(device).then(() => {
-            this.devices.push(device);
-          }).catch((error) => {
-            switch (error.statusCode) {
-              case 500:
-                // We get this error when attempting to subscribe
-                // to satellite speakers that are invisible
-                // Don't know of an easy way at this point to filter them out
-                // We don't want to or need to subscribe to them
-                break;
-              default:
-                console.log(error);
-            }
-          });
-        });
+        const discoveredIp = sonosDevice.host
+          || sonosDevice.ip
+          || (typeof sonosDevice.baseUrl === 'string'
+            ? sonosDevice.baseUrl.replace(/^https?:\/\//, '').split(':')[0]
+            : null);
+        this._registerDevice(sonosDevice, discoveredIp);
       });
 
       sonosSearch.on('timeout', () => {
         resolve(this.devices);
       });
     });
+  }
+
+  async _discoverConfiguredDevices(targets) {
+    const devices = new Array(targets.length).fill(null);
+    const seen = new Set();
+    console.info(`Scanning ${targets.length} configured Sonos target(s) across ${this.scanPasses} pass(es)`);
+    for (let pass = 1; pass <= this.scanPasses; pass += 1) {
+      console.info(`Starting Sonos scan pass ${pass}/${this.scanPasses}`);
+      // eslint-disable-next-line no-await-in-loop
+      await this._runWithConcurrency(targets, this.scanConcurrency, async (ipAddress, index) => {
+        if (devices[index]) { return; }
+        const device = await this._createDeviceFromIp(ipAddress);
+        if (device && !seen.has(device.id)) {
+          seen.add(device.id);
+          devices[index] = device;
+        }
+      });
+      console.info(
+        `End Sonos scan pass ${pass}/${this.scanPasses} `
+        + `(${devices.filter(Boolean).length}/${targets.length} target(s) matched)`,
+      );
+      if (devices.every(Boolean)) { break; }
+    }
+    this.devices = devices.filter(Boolean);
+    return this.devices;
+  }
+
+  async _createDeviceFromIp(ipAddress) {
+    // Keep the TCP probe short to avoid slow scans on empty addresses.
+    const hasOpenPort = await this._isPortOpen(ipAddress, 1400, this.scanConnectTimeout);
+    if (!hasOpenPort) { return null; }
+
+    console.info(`Found Sonos candidate at ${ipAddress}:1400`);
+    try {
+      const device = await this._registerDevice(new Sonos(ipAddress), ipAddress);
+      if (device) { return device; }
+    } catch (error) {
+      console.log(`Unable to initialize Sonos device at ${ipAddress}`, error.message || error);
+    }
+    return null;
+  }
+
+  async _registerDevice(device, discoveredIp = null) {
+    try {
+      const description = await this._withTimeout(
+        device.deviceDescription(),
+        this.scanInitTimeout,
+        `device description for ${discoveredIp || device.host || 'unknown-ip'}`,
+      );
+      device.name = description.roomName;
+      device.displayName = description.displayName;
+      device.host = discoveredIp || device.host || device.baseUrl || null;
+      if (process.env.REGION) {
+        if (process.env.REGION in SpotifyRegion) {
+          device.setSpotifyRegion(SpotifyRegion[process.env.REGION]);
+          console.log(`Setting spotify region to ${process.env.REGION} for ${device.host || 'unknown-ip'}`);
+        } else {
+          console.error(`Specified region ${process.env.REGION} is not valid for ${device.host || 'unknown-ip'}`);
+        }
+      }
+      const UUID = description.UDN.split('uuid:')[1];
+      if (this.devices.find((existingDevice) => existingDevice.id === UUID)) {
+        console.info(`Skipping duplicate Sonos device ${device.name || UUID}`);
+        return null;
+      }
+      device.id = UUID;
+      try {
+        await this._withTimeout(
+          this.listener.subscribeTo(device),
+          this.scanInitTimeout,
+          `listener subscription for ${device.name || UUID} (${device.host || 'unknown-ip'})`,
+        );
+        this.devices.push(device);
+        console.info(
+          `Added Sonos device: name="${device.name}" displayName="${device.displayName}" `
+          + `id=${device.id} ip=${device.host || 'unknown'}`,
+        );
+        return device;
+      } catch (error) {
+        switch (error.statusCode) {
+          case 500:
+            console.info(`Skipping Sonos satellite/invisible device ${device.name || UUID}`);
+            break;
+          default:
+            console.log(error);
+        }
+        return null;
+      }
+    } catch (error) {
+      console.log(error);
+      return null;
+    }
+  }
+
+  _getConfiguredDiscoveryTargets() {
+    const configuredIps = SonosNetwork._parseIpList(process.env.SONOS_DEVICE_IPS);
+    const cidrTargets = process.env.SONOS_SCAN_CIDR
+      ? SonosNetwork._expandCidr(process.env.SONOS_SCAN_CIDR)
+      : [];
+    if (configuredIps.length > 0) {
+      console.info(`Configured Sonos IPs: ${configuredIps.join(', ')}`);
+    }
+    if (process.env.SONOS_SCAN_CIDR) {
+      console.info(`Expanded Sonos scan CIDR ${process.env.SONOS_SCAN_CIDR} to ${cidrTargets.length} host(s)`);
+    }
+    return [...new Set([...configuredIps, ...cidrTargets])];
+  }
+
+  async _isPortOpen(host, port, timeout) {
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        resolve(result);
+      };
+
+      socket.setTimeout(timeout);
+      socket.once('connect', () => finish(true));
+      socket.once('timeout', () => finish(false));
+      socket.once('error', () => finish(false));
+      socket.connect(port, host);
+    });
+  }
+
+  async _runWithConcurrency(items, concurrency, worker) {
+    if (items.length === 0) { return; }
+    const parallelism = Math.max(1, concurrency);
+    let index = 0;
+    const runners = Array.from({ length: Math.min(parallelism, items.length) }, async () => {
+      while (index < items.length) {
+        const currentIndex = index;
+        index += 1;
+        // eslint-disable-next-line no-await-in-loop
+        await worker(items[currentIndex], currentIndex);
+      }
+    });
+    await Promise.all(runners);
+  }
+
+  async _withTimeout(promise, timeoutMs, operationLabel) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Timed out while waiting for ${operationLabel}`));
+        }, timeoutMs);
+      }),
+    ]);
   }
 
   /**
@@ -768,6 +933,56 @@ class SonosNetwork {
     const volume = typeof (volumeSum) === 'object' ? volumeSum.volume : Math.floor(volumeSum / zones.length);
 
     return { volume, mute };
+  }
+
+  static _parseIpList(value) {
+    if (!value) { return []; }
+    return value.split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  static _expandCidr(cidr) {
+    const [network, prefixLengthRaw] = cidr.split('/');
+    const prefixLength = Number(prefixLengthRaw);
+    if (!network || Number.isNaN(prefixLength) || prefixLength < 0 || prefixLength > 32) {
+      throw new Error(`Invalid SONOS_SCAN_CIDR value: ${cidr}`);
+    }
+
+    const hostCount = 2 ** (32 - prefixLength);
+    if (hostCount > 4096) {
+      throw new Error(`SONOS_SCAN_CIDR is too large to scan quickly: ${cidr}`);
+    }
+
+    const networkInt = SonosNetwork._ipToInt(network);
+    const networkMask = prefixLength === 0 ? 0 : ((0xffffffff << (32 - prefixLength)) >>> 0);
+    const baseNetwork = networkInt & networkMask;
+    const hosts = [];
+    const firstHost = prefixLength >= 31 ? 0 : 1;
+    const lastHost = prefixLength >= 31 ? hostCount : hostCount - 1;
+
+    for (let hostOffset = firstHost; hostOffset < lastHost; hostOffset += 1) {
+      hosts.push(SonosNetwork._intToIp(baseNetwork + hostOffset));
+    }
+
+    return hosts;
+  }
+
+  static _ipToInt(ipAddress) {
+    const octets = ipAddress.split('.').map((part) => Number(part));
+    if (octets.length !== 4 || octets.some((octet) => Number.isNaN(octet) || octet < 0 || octet > 255)) {
+      throw new Error(`Invalid IPv4 address: ${ipAddress}`);
+    }
+    return octets.reduce((accumulator, octet) => ((accumulator << 8) >>> 0) + octet, 0);
+  }
+
+  static _intToIp(value) {
+    return [
+      (value >>> 24) & 255,
+      (value >>> 16) & 255,
+      (value >>> 8) & 255,
+      value & 255,
+    ].join('.');
   }
 
   /**

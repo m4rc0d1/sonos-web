@@ -3,7 +3,8 @@ ARG GIT_REF=master
 FROM alpine/git AS source
 ARG GIT_REF
 WORKDIR /src
-RUN git clone --branch ${GIT_REF} --single-branch https://github.com/m4rc0d1/sonos-web repo
+RUN git clone --branch ${GIT_REF} --single-branch https://github.com/m4rc0d1/sonos-web repo && \
+    git -C repo rev-parse HEAD > /src/repo-commit
 
 FROM node:16 AS client-build
 WORKDIR /sonos-web/client
@@ -14,6 +15,7 @@ RUN npm install && \
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /sonos-web/server
 COPY --from=source /src/repo/server ./
+COPY --from=source /src/repo-commit ./.git-commit
 RUN rm -f package-lock.json && \
     npm install && \
     cp .env.production .env && \
@@ -22,4 +24,4 @@ RUN rm -f package-lock.json && \
 COPY --from=client-build /sonos-web/client/dist ./dist
 
 EXPOSE 5050
-CMD ["npm", "start"]
+CMD ["sh", "-c", "echo \"Commit $(cut -c1-7 .git-commit)\" && npm start"]

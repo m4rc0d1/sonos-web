@@ -94,6 +94,50 @@ npm install
 npm start
 ```
 
+### Sonos Discovery Configuration
+
+If automatic Sonos discovery does not work because your speakers are on a segmented network, you can configure discovery explicitly with environment variables:
+
+- `SONOS_DEVICE_IPS`
+  Comma-separated list of Sonos player IPs to probe directly.
+  Example: `SONOS_DEVICE_IPS=192.168.1.20,192.168.2.15`
+
+- `SONOS_SCAN_CIDR`
+  IPv4 subnet in CIDR format to scan for Sonos devices. The scan checks for an open `1400/tcp` port and validates the Sonos device description.
+  Example: `SONOS_SCAN_CIDR=192.168.10.0/24`
+
+- `SONOS_SCAN_INIT_TIMEOUT_MS`
+  Timeout in milliseconds used for Sonos device initialization during configured discovery.
+  Default: `1500`
+
+- `SONOS_SCAN_CONNECT_TIMEOUT_MS`
+  Timeout in milliseconds used for the initial TCP probe on port `1400` before a device is queried.
+  Default: `750`
+
+- `SONOS_SCAN_CONCURRENCY`
+  Number of IPs scanned in parallel when `SONOS_SCAN_CIDR` is used.
+  Values higher than `16` can reduce scan reliability on segmented networks.
+  Default: `8`
+
+- `SONOS_SCAN_PASSES`
+  Number of full scan passes over the configured target list or CIDR expansion.
+  Example: `3` means the whole subnet scan is repeated three times.
+  Default: `2`
+
+- `SONOS_LISTENER`
+  IP address or hostname advertised by `node-sonos` for event callbacks from Sonos devices.
+  Default: `ip.address('public')`
+
+- `SONOS_LISTENER_PORT`
+  TCP port used by `node-sonos` for the callback listener that receives Sonos event notifications.
+  Default: `4000`
+
+To receive Sonos event callbacks reliably, any firewall between the speakers and sonos-web must allow inbound TCP connections from Sonos devices to `SONOS_LISTENER:SONOS_LISTENER_PORT`.
+
+`SONOS_DEVICE_IPS` and `SONOS_SCAN_CIDR` can be used together. sonos-web merges both target lists, removes duplicates, and probes all resulting IPs.
+
+If either `SONOS_DEVICE_IPS` or `SONOS_SCAN_CIDR` is set, sonos-web uses the configured targets instead of multicast discovery.
+
 ## Screenshots
 
 ### Now Playing
