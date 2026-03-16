@@ -98,49 +98,60 @@
         </div>
         <div class="now-playing-bar-right">
           <v-card text tile>
-            <v-list dense class="pa-0 volume-bar">
-              <v-list-item>
-                <v-btn @click="handleQueueButtonClick" class="queue-button" title="Queue" text
-                :class="$route.name === 'PlayQueue' ? 'v-btn--active': ''">
-                  <v-icon>queue_music</v-icon>
-                </v-btn>
-                <v-menu class="room-select-button" bottom offset-y top>
-                  <template v-slot:activator="{ on }">
-                    <v-btn :title="groupName(activeZoneGroupId)" text v-on="on">
-                      <v-icon small>speaker_group</v-icon>
+                <v-list dense class="pa-0 volume-bar">
+                  <v-list-item>
+                    <div class="room-select-button">
+                      <v-menu bottom offset-y top>
+                        <template v-slot:activator="{ on }">
+                          <v-btn :title="groupName(activeZoneGroupId)" text v-on="on">
+                            <v-icon small>speaker_group</v-icon>
+                            <span class="room-select-label text-truncate">
+                              {{ groupName(activeZoneGroupId) }}
+                            </span>
+                          </v-btn>
+                        </template>
+                        <v-list class="room-select-list">
+                        <v-list-item v-for="zoneGroup in zoneGroups" :key="zoneGroup.id"
+                        @click="groupSelected(zoneGroup.id)"
+                        class="room-select-title"
+                        :class="activeZoneGroupId === zoneGroup.id ? 'active' : ''">
+                          <v-list-item-title>{{ groupName(zoneGroup.id) }}</v-list-item-title>
+                          </v-list-item>
+                        </v-list>
+                      </v-menu>
+                    </div>
+                    <v-btn @click="handleQueueButtonClick" class="queue-button" title="Queue" text
+                    :class="$route.name === 'PlayQueue' ? 'v-btn--active': ''">
+                      <v-icon>queue_music</v-icon>
                     </v-btn>
-                  </template>
-                  <v-list class="room-select-list">
-                    <v-list-item v-for="zoneGroup in zoneGroups" :key="zoneGroup.id"
-                    @click="groupSelected(zoneGroup.id)"
-                    class="room-select-title"
-                    :class="activeZoneGroupId === zoneGroup.id ? 'active' : ''">
-                      <v-list-item-title>{{ groupName(zoneGroup.id) }}</v-list-item-title>
-                    </v-list-item>
-                  </v-list>
-                </v-menu>
-                <v-menu offset-y top :open-on-click="hasMembers" :close-on-content-click="false">
-                  <template v-slot:activator="{ on }">
-                    <v-slider
-                      thumb-label
-                      v-on="on"
-                      hide-details
-                      color="#b3b3b3"
-                      track-color="dark-grey"
-                      :prepend-icon="volumeIcon"
-                      @click:prepend="toggleMute"
-                      v-model="volume">
-                    </v-slider>
-                  </template>
+                    <div class="volume-menu">
+                      <v-menu
+                        offset-y
+                        top
+                        :open-on-click="hasMembers"
+                        :close-on-content-click="false">
+                        <template v-slot:activator="{ on }">
+                          <v-slider
+                          thumb-label
+                          v-on="on"
+                          hide-details
+                          color="#b3b3b3"
+                          track-color="dark-grey"
+                          :prepend-icon="volumeIcon"
+                          @click:prepend="toggleMute"
+                          v-model="volume">
+                        </v-slider>
+                      </template>
 
-                  <v-card color="secondary pa-2">
-                    <member-volume-bar v-for="member in activeZoneGroupMembers" :key="member.id"
-                      :zoneMember="member">
-                    </member-volume-bar>
-                  </v-card>
-                </v-menu>
-              </v-list-item>
-            </v-list>
+                      <v-card color="secondary pa-2">
+                        <member-volume-bar v-for="member in activeZoneGroupMembers" :key="member.id"
+                          :zoneMember="member">
+                        </member-volume-bar>
+                      </v-card>
+                    </v-menu>
+                    </div>
+                  </v-list-item>
+                </v-list>
           </v-card>
         </div>
       </v-layout>
@@ -500,6 +511,9 @@ export default {
 .now-playing-bar-right .v-list-item {
   padding: 0px;
   padding-right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 .now-playing-bar-right .v-input__prepend-outer {
   margin-right: 4px;
@@ -517,6 +531,10 @@ export default {
   min-width: 180px;
   display: flex;
   justify-content: flex-end;
+  overflow: hidden;
+}
+.now-playing-bar-right .v-card {
+  width: 100%;
 }
 @media (max-width: 960px) {
   .v-app-bar--fixed.now-playing-bar {
@@ -545,6 +563,15 @@ export default {
   padding: 0px!important;
   min-width: 24px!important;
 }
+.now-playing-bar-right .volume-bar {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: 100%;
+}
+.now-playing-bar-right .volume-bar .v-list-item {
+  width: 100%;
+}
 .now-playing-bar .progress-time {
   line-height: 24px;
   font-weight: 600;
@@ -552,8 +579,8 @@ export default {
 .now-playing-bar .progress-bar {
   margin-top:-4px;
 }
-.now-playing-bar .volume-bar, .volume-control {
-  width: 180px;
+.now-playing-bar .volume-control {
+  width: 120px;
 }
 /***** Slider controls ******/
 .v-slider__thumb {
@@ -601,21 +628,52 @@ export default {
 }
 
 .now-playing-bar .room-select-button {
-  width: 24px;
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: flex-end;
   margin-right: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .now-playing-bar .room-select-button .v-btn {
-  min-width: 24px;
-  padding: 0px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0px 4px;
   margin: 0px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.now-playing-bar .room-select-button .v-icon {
+  flex: 0 0 auto;
+}
+
+.now-playing-bar .room-select-label {
+  display: inline-block;
+  flex: 0 1 auto;
+  margin-left: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
 }
 
 .now-playing-bar .queue-button {
+  flex: 0 0 auto;
   min-width: 24px;
   padding: 0px;
   margin: 0px;
-  margin-right: 8px;
+  margin: 0 8px 0 4px;
+}
+
+.now-playing-bar .volume-menu {
+  flex: 0 0 120px;
+  width: 120px;
 }
 
 .now-playing-bar .queue-button.v-btn--active:before {
