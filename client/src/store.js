@@ -64,10 +64,9 @@ export default new Vuex.Store({
     albumArtURLForGroup: (state, getters) => (groupId) => {
       const group = getters.getGroupById(groupId);
       if (group && group.track) {
-        if (group.track.albumArtURL) return group.track.albumArtURL;
-
         if (group.tvPlaying) return state.tvAlbumArtURL;
         if (group.lineInPlaying) return state.lineInAlbumArtURL;
+        if (group.track.albumArtURL) return group.track.albumArtURL;
         return state.defaultAlbumArtURL;
       }
       return state.defaultAlbumArtURL;

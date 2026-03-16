@@ -307,13 +307,15 @@ export default {
       return this.$store.getters.trackTitleForGroup(this.activeZoneGroupId);
     },
     artist() {
-      if (this.activeZoneGroup && this.activeZoneGroup.track) {
+      if (this.activeZoneGroup && this.activeZoneGroup.track
+        && !this.activeZoneGroup.tvPlaying && !this.activeZoneGroup.lineInPlaying) {
         return this.activeZoneGroup.track.artist;
       }
       return '';
     },
     album() {
-      if (this.activeZoneGroup && this.activeZoneGroup.track) {
+      if (this.activeZoneGroup && this.activeZoneGroup.track
+        && !this.activeZoneGroup.tvPlaying && !this.activeZoneGroup.lineInPlaying) {
         return this.activeZoneGroup.track.album;
       }
       return '';

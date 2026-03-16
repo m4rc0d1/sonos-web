@@ -44,26 +44,29 @@
             <div @mouseover="tooltipOnOverFlow" class="headline text-truncate font-weight-medium">
               {{ trackTitle(group.id) }}
             </div>
-            <v-layout :class="$style.artistAlbumInfo" ma-0 v-if="group.track">
+            <v-layout
+              :class="$style.artistAlbumInfo"
+              ma-0
+              v-if="displayArtist(group) || displayAlbum(group)">
               <router-link
                 @mouseover="tooltipOnOverFlow"
-                :to="`/artist/${encodedItem(group.track.artist)}`"
+                :to="`/artist/${encodedItem(displayArtist(group))}`"
                 class="item-link artist text-truncate text-xs-center pa-0">
-                {{ group.track.artist }}
+                {{ displayArtist(group) }}
               </router-link>
-              <span v-if="group.track.artist" class="item-link-separator">•</span>
+              <span v-if="displayArtist(group)" class="item-link-separator">•</span>
               <router-link
-                v-if="group.track.artist"
+                v-if="displayArtist(group)"
                 @mouseover="tooltipOnOverFlow"
-                :to="`/album/${encodedItem(group.track.album)}`"
+                :to="`/album/${encodedItem(displayAlbum(group))}`"
                 class="item-link album text-truncate text-xs-center pa-0">
-                {{ group.track.album }}
+                {{ displayAlbum(group) }}
               </router-link>
               <router-link
-                v-else-if="group.track.album"
+                v-else-if="displayAlbum(group)"
                 @mouseover="tooltipOnOverFlow"
                 class="item-link album text-truncate text-xs-center pa-0">
-                {{ group.track.album }}
+                {{ displayAlbum(group) }}
               </router-link>
             </v-layout>
           </v-card-title>
@@ -147,6 +150,18 @@ export default {
     },
     trackTitle(groupId) {
       return this.$store.getters.trackTitleForGroup(groupId);
+    },
+    displayArtist(group) {
+      if (!group || !group.track || group.tvPlaying || group.lineInPlaying) {
+        return '';
+      }
+      return group.track.artist || '';
+    },
+    displayAlbum(group) {
+      if (!group || !group.track || group.tvPlaying || group.lineInPlaying) {
+        return '';
+      }
+      return group.track.album || '';
     },
     isPlaying(playState) {
       return playState === PlayState.playing || playState === PlayState.transitioning;

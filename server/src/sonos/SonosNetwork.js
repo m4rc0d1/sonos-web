@@ -938,6 +938,85 @@ class SonosNetwork {
     return { volume, mute };
   }
 
+  static _decodeXmlValue(value = '') {
+    return value
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+  }
+
+  static _extractDidlValue(metadata, tagName) {
+    const match = metadata.match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, 'i'));
+    return match ? SonosNetwork._decodeXmlValue(match[1].trim()) : '';
+  }
+
+  static _trackFromMetadata(metadata) {
+    if (!metadata || metadata === 'NOT_IMPLEMENTED') {
+      return {};
+    }
+    return {
+      title: SonosNetwork._extractDidlValue(metadata, 'dc:title'),
+      artist: SonosNetwork._extractDidlValue(metadata, 'dc:creator')
+        || SonosNetwork._extractDidlValue(metadata, 'upnp:artist'),
+      album: SonosNetwork._extractDidlValue(metadata, 'upnp:album'),
+      albumArtURI: SonosNetwork._extractDidlValue(metadata, 'upnp:albumArtURI'),
+    };
+  }
+
+  static _looksLikeStreamUriTitle(title) {
+    if (!title) { return false; }
+    return /https?:\/\//i.test(title)
+      || /[?&][^=]+=/.test(title)
+      || /\.(mp3|aac|m4a|ogg|wav)(\?|$)/i.test(title);
+  }
+
+  static _isGenericStreamTitle(title) {
+    if (!title) { return false; }
+    return [
+      'icecast',
+      'stream',
+      'radio',
+      'unknown',
+    ].includes(title.trim().toLowerCase());
+  }
+
+  static _mergeTrackInfo(currentTrack, metadataTrack) {
+    if (!metadataTrack || Object.keys(metadataTrack).length === 0) {
+      return currentTrack;
+    }
+
+    const mergedTrack = { ...currentTrack };
+    if (
+      !mergedTrack.title
+      || SonosNetwork._looksLikeStreamUriTitle(mergedTrack.title)
+      || SonosNetwork._isGenericStreamTitle(mergedTrack.title)
+    ) {
+      mergedTrack.title = metadataTrack.title || mergedTrack.title;
+    }
+    if (!mergedTrack.artist) {
+      mergedTrack.artist = metadataTrack.artist || mergedTrack.artist;
+    }
+    if (!mergedTrack.album) {
+      mergedTrack.album = metadataTrack.album || mergedTrack.album;
+    }
+    if (!mergedTrack.albumArtURI && metadataTrack.albumArtURI) {
+      mergedTrack.albumArtURI = metadataTrack.albumArtURI;
+    }
+    return mergedTrack;
+  }
+
+  static _buildAlbumArtURL(device, albumArtURI) {
+    if (!albumArtURI) { return ''; }
+    if (/^https?:\/\//i.test(albumArtURI)) {
+      return albumArtURI;
+    }
+
+    const baseUrl = device.baseUrl || `http://${device.host}:1400`;
+    return `${baseUrl}${albumArtURI}`;
+  }
+
   static _parseIpList(value) {
     if (!value) { return []; }
     return value.split(',')
@@ -1007,6 +1086,7 @@ class SonosNetwork {
      * CurrentSpeed - 1, ?
      */
     const transportInfo = await zone.avTransportService().GetTransportInfo();
+    const mediaInfo = await zone.avTransportService().GetMediaInfo();
 
     /**
      * Actions - Set, Stop, Pause, Play, X_DLNA_SeekTime, Next, Previous, X_DLNA_SeekTrackNr
@@ -1037,14 +1117,22 @@ class SonosNetwork {
      * queuePosition
      */
     const currentTrack = await zone.avTransportService().CurrentTrack();
+    const metadataTrack = SonosNetwork._trackFromMetadata(
+      mediaInfo.CurrentURIMetaData || positionInfo.TrackMetaData || '',
+    );
 
-    const tvPlaying = positionInfo.TrackURI.match(/^x-sonos-htastream:/) !== null;
-    const lineInPlaying = positionInfo.TrackURI.match(/^x-rincon-stream:/) !== null;
+    const sourceUri = mediaInfo.CurrentURI || positionInfo.TrackURI || currentTrack.uri || '';
+    const tvPlaying = /^x-sonos-htastream:/.test(sourceUri);
+    const lineInPlaying = /^x-rincon-stream:/.test(sourceUri);
+    const track = SonosNetwork._mergeTrackInfo(currentTrack, metadataTrack);
+    if (!track.albumArtURL && track.albumArtURI) {
+      track.albumArtURL = SonosNetwork._buildAlbumArtURL(zone, track.albumArtURI);
+    }
 
     const queue = await this._getQueue(zone.id);
 
     return {
-      track: currentTrack,
+      track,
       state: transportInfo.CurrentTransportState,
       playMode: transportSettings.PlayMode,
       actions: transportActions.Actions.split(', '),
