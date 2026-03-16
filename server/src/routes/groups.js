@@ -18,8 +18,12 @@ module.exports = function Groups(sonosNetwork) {
     res.status(200).send();
   });
   this.router.post('/:id/join', async (req, res) => {
-    await this.sonosNetwork.joinGroup(req.params.id, req.body.zoneId);
-    res.status(200).send();
+    try {
+      await this.sonosNetwork.joinGroup(req.params.id, req.body.zoneId);
+      res.status(200).send();
+    } catch (error) {
+      res.status(error.statusCode || 500).send(error.message);
+    }
   });
   this.router.put('/:id/play', async (req, res) => {
     await this.sonosNetwork.play(req.params.id);

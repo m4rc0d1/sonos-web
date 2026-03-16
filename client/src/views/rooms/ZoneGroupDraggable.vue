@@ -109,9 +109,8 @@ export default {
         newMembers[index] = newMember.coordinator;
         // Add the whole group, its coordinator, and members to the group we dropped onto
         newMembers.push(...newMember.members);
-        // Join coordinator and all its members to new group
+        // Joining the source coordinator is enough; Sonos moves the full source group with it.
         groupsAPI.join(groupId, newMember.coordinator.id);
-        newMember.members.map(member => groupsAPI.join(groupId, member.id));
 
         // Remove this zone group because we have now merged it into another zone group
         this.$store.commit('REMOVE_ZONE_GROUP', newMember.id);

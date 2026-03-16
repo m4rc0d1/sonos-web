@@ -666,6 +666,8 @@ class SonosNetwork {
   async joinGroup(groupId, zoneId) {
     const zone = this.devices.find((device) => device.id === zoneId);
     const group = this.zoneGroups.find((zg) => zg.id === groupId);
+    if (!zone || !group) { return; }
+    if (group.coordinator.id === zoneId) { return; }
     await zone.setAVTransportURI({ uri: `x-rincon:${group.coordinator.id}`, onlySetUri: true });
   }
 
