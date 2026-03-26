@@ -38,3 +38,9 @@ export default {
   margin-top: 5px;
 }
 </style>
+
+<style>
+.member-zone {
+  touch-action: pan-y;
+}
+</style>

@@ -5,11 +5,25 @@
         put: false,
         pull: ['zoneGroupMembers']
       }"
+    :delay-on-touch-only="true"
+    :delay="450"
+    :touch-start-threshold="8"
+    :force-fallback="true"
+    :scroll="true"
+    :bubble-scroll="true"
+    :scroll-sensitivity="120"
+    :scroll-speed="10"
+    :fallback-on-body="true"
+    fallback-class="zone-group-fallback"
+    chosen-class="zone-group-chosen"
+    drag-class="zone-group-drag"
+    ghost-class="zone-group-ghost"
     :sort="false"
     draggable='.zone-group'>
     <v-card class="px-3 pb-1 zone-group" v-for="group in zoneGroupAsArray" :key="group.id"
     hover :raised="isActiveGroup(group.id)" color="tertiary">
       <div v-show="!isActiveGroup(group.id)" class="overlay"></div>
+      <div class="zone-group-content">
       <v-layout>
         <v-flex xs12 pa-0 pt-0>
           <v-card-title class="pb-0 align-center pt-6">
@@ -44,34 +58,44 @@
             <div @mouseover="tooltipOnOverFlow" class="headline text-truncate font-weight-medium">
               {{ trackTitle(group.id) }}
             </div>
-            <v-layout
+            <div
               :class="$style.artistAlbumInfo"
-              ma-0
               v-if="displayArtist(group) || displayAlbum(group)">
               <router-link
+                v-if="displayArtist(group)"
                 @mouseover="tooltipOnOverFlow"
                 :to="`/artist/${encodedItem(displayArtist(group))}`"
-                class="item-link artist text-truncate text-xs-center pa-0">
+                :class="[
+                  $style.artistAlbumLine,
+                  'item-link artist text-truncate pa-0'
+                ]">
                 {{ displayArtist(group) }}
               </router-link>
               <span v-if="displayArtist(group)" class="item-link-separator">•</span>
               <router-link
-                v-if="displayArtist(group)"
+                v-if="displayArtist(group) && displayAlbum(group)"
                 @mouseover="tooltipOnOverFlow"
                 :to="`/album/${encodedItem(displayAlbum(group))}`"
-                class="item-link album text-truncate text-xs-center pa-0">
+                :class="[
+                  $style.artistAlbumLine,
+                  'item-link album text-truncate pa-0'
+                ]">
                 {{ displayAlbum(group) }}
               </router-link>
               <router-link
                 v-else-if="displayAlbum(group)"
                 @mouseover="tooltipOnOverFlow"
-                class="item-link album text-truncate text-xs-center pa-0">
+                :class="[
+                  $style.artistAlbumLine,
+                  'item-link album text-truncate pa-0'
+                ]">
                 {{ displayAlbum(group) }}
               </router-link>
-            </v-layout>
+            </div>
           </v-card-title>
         </v-flex>
       </v-layout>
+      </div>
     </v-card>
   </draggable>
 </template>
@@ -226,6 +250,60 @@ export default {
   user-select: none;
 }
 
+.zone-group {
+  touch-action: pan-y;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.zone-group.zone-group-chosen,
+.zone-group.zone-group-drag {
+  transform: scale(1.02);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+  z-index: 3;
+}
+
+.zone-group.zone-group-ghost {
+  opacity: 0.35;
+}
+
+.zone-group.zone-group-fallback {
+  transform: scale(0.7);
+  transform-origin: top center;
+}
+
+.zone-group.zone-group-fallback .zone-group-content > .layout.mb-3 {
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center;
+}
+
+.zone-group.zone-group-fallback .zone-group-content > .layout.mb-3 > div:first-child {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.zone-group.zone-group-fallback .zone-group-content
+  > .layout.mb-3 > div:first-child > .v-responsive.v-image {
+  margin: 0 auto;
+}
+
+.zone-group.zone-group-fallback .zone-group-content .background-image:before {
+  content: none;
+}
+
+.zone-group.zone-group-fallback .zone-group-content > .layout.mb-3 > .flex,
+.zone-group.zone-group-fallback .zone-group-content > .layout.mb-3 > .xs8,
+.zone-group.zone-group-fallback .zone-group-content > .layout.mb-3 > .xs12 {
+  display: none;
+}
+
+.zone-group .item-link-separator {
+  display: none;
+}
+
 .draggable {
   min-height:10px;
 }
@@ -233,6 +311,15 @@ export default {
 
 <style module>
 .artistAlbumInfo {
+  display: flex;
+  flex-direction: column;
   line-height: 20px;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.artistAlbumLine {
+  width: 100%;
+  text-align: left;
 }
 </style>

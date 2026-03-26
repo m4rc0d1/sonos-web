@@ -157,6 +157,11 @@ export default {
     padding-bottom: 150px !important;
   }
 }
+@media (max-width: 600px) {
+  .now-playing-bar-padding {
+    padding-bottom: 210px !important;
+  }
+}
 .app-background {
   background-size: cover;
   background-repeat: no-repeat;
