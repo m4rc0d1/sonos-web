@@ -7,7 +7,7 @@
     class="now-playing-bar"
     height="90">
     <v-container fill-height fluid pa-0>
-      <v-layout align-center justify-space-between>
+      <v-layout align-center justify-space-between class="now-playing-bar-layout">
         <div class="now-playing-bar-left">
           <v-card text tile>
             <v-list two-line>
@@ -491,7 +491,8 @@ export default {
 .v-app-bar--fixed.now-playing-bar {
   top: auto;
   bottom: 0;
-  height: 90px;
+  height: auto !important;
+  min-height: 90px;
   min-width: 620px;
 }
 .now-playing-bar .v-list, .now-playing-bar .v-card {
@@ -499,8 +500,14 @@ export default {
   box-shadow: none;
 }
 .now-playing-bar .v-toolbar__content {
-  height: 100%!important;
+  height: auto !important;
+  min-height: 90px;
   padding: 0 8px!important;
+}
+.now-playing-bar .now-playing-bar-layout {
+  width: 100%;
+  margin: 0;
+  flex-wrap: nowrap;
 }
 .now-playing-bar .v-list-item__title {
   font-weight: 500;
@@ -540,25 +547,74 @@ export default {
 }
 @media (max-width: 960px) {
   .v-app-bar--fixed.now-playing-bar {
-    padding-top: 90px;
-    height: 150px !important;
     min-width: auto;
+    min-height: 150px;
+  }
+
+  .now-playing-bar .v-toolbar__content {
+    padding: 8px !important;
+  }
+
+  .now-playing-bar .now-playing-bar-layout {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    row-gap: 8px;
+    column-gap: 12px;
+  }
+
+  .now-playing-bar-left .v-list {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .now-playing-bar-left .v-list-item {
+    min-height: 40px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .now-playing-bar-center .v-list-item {
+    padding-top: 0;
+    padding-bottom: 0;
   }
 
   .now-playing-bar-left {
-    width: 40%;
+    order: 2;
+    width: calc(50% - 6px);
+    min-width: 0;
   }
 
   .now-playing-bar-center {
-    display: block;
-    position: absolute;
+    order: 1;
+    width: 100%;
     max-width: none !important;
-    bottom: 60px;
-    width: calc(100% - 12px);
   }
 
   .now-playing-bar-right {
-    width: 60% !important;
+    order: 3;
+    width: calc(50% - 6px) !important;
+    min-width: 0;
+  }
+}
+@media (max-width: 600px) {
+  .v-app-bar--fixed.now-playing-bar {
+    min-height: 210px;
+  }
+
+  .now-playing-bar-left,
+  .now-playing-bar-right,
+  .now-playing-bar-center {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .now-playing-bar-left {
+    order: 2;
+  }
+
+  .now-playing-bar-right {
+    order: 3;
   }
 }
 .now-playing-bar-right .v-btn {
