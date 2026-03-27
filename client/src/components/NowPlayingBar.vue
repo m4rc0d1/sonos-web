@@ -490,10 +490,12 @@ export default {
 }
 .v-app-bar--fixed.now-playing-bar {
   top: auto;
-  bottom: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
   height: auto !important;
-  min-height: 90px;
+  min-height: var(--now-playing-bar-height, 90px);
   min-width: 620px;
+  transform: translateY(var(--viewport-bottom-shift, 0px));
+  will-change: transform;
 }
 .now-playing-bar .v-list, .now-playing-bar .v-card {
   background: rgba(0,0,0,0)!important;
@@ -501,7 +503,7 @@ export default {
 }
 .now-playing-bar .v-toolbar__content {
   height: auto !important;
-  min-height: 90px;
+  min-height: var(--now-playing-bar-height, 90px);
   padding: 0 8px!important;
 }
 .now-playing-bar .now-playing-bar-layout {
@@ -548,7 +550,6 @@ export default {
 @media (max-width: 960px) {
   .v-app-bar--fixed.now-playing-bar {
     min-width: auto;
-    min-height: 150px;
   }
 
   .now-playing-bar .v-toolbar__content {
@@ -598,10 +599,6 @@ export default {
   }
 }
 @media (max-width: 600px) {
-  .v-app-bar--fixed.now-playing-bar {
-    min-height: 210px;
-  }
-
   .now-playing-bar-left,
   .now-playing-bar-right,
   .now-playing-bar-center {

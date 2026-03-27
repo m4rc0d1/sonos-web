@@ -115,6 +115,25 @@ export default {
     APP_VERSION: `v${version}`,
 
   }),
+  methods: {
+    updateViewportBottomOffset() {
+      const root = document.documentElement;
+      const { visualViewport } = window;
+
+      if (!visualViewport) {
+        root.style.setProperty('--viewport-bottom-offset', '0px');
+        root.style.setProperty('--viewport-bottom-shift', '0px');
+        return;
+      }
+
+      const layoutViewportHeight = root.clientHeight;
+      const visualViewportBottom = visualViewport.height + visualViewport.offsetTop;
+      const bottomOffset = Math.round(layoutViewportHeight - visualViewportBottom);
+
+      root.style.setProperty('--viewport-bottom-offset', `${bottomOffset}px`);
+      root.style.setProperty('--viewport-bottom-shift', `${-bottomOffset}px`);
+    },
+  },
   computed: {
     discoveringSonos() {
       return this.$store.state.discoveringSonos;
@@ -123,10 +142,32 @@ export default {
       return this.$store.state.hasError;
     },
   },
+  mounted() {
+    this.updateViewportBottomOffset();
+    window.addEventListener('resize', this.updateViewportBottomOffset);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', this.updateViewportBottomOffset);
+      window.visualViewport.addEventListener('scroll', this.updateViewportBottomOffset);
+    }
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.updateViewportBottomOffset);
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', this.updateViewportBottomOffset);
+      window.visualViewport.removeEventListener('scroll', this.updateViewportBottomOffset);
+    }
+    document.documentElement.style.removeProperty('--viewport-bottom-offset');
+    document.documentElement.style.removeProperty('--viewport-bottom-shift');
+  },
 };
 </script>
 
 <style>
+:root {
+  --now-playing-bar-height: 90px;
+  --viewport-bottom-offset: 0px;
+  --viewport-bottom-shift: 0px;
+}
 .text-xs-center {
   text-align: center!important;
 }
@@ -150,16 +191,34 @@ export default {
   background: #282828;
 }
 .now-playing-bar-padding {
-  padding-bottom: 90px!important;
+  padding-bottom: calc(
+    var(--now-playing-bar-height) +
+    env(safe-area-inset-bottom, 0px) +
+    var(--viewport-bottom-offset)
+  ) !important;
 }
 @media (max-width: 960px) {
+  :root {
+    --now-playing-bar-height: 150px;
+  }
   .now-playing-bar-padding {
-    padding-bottom: 150px !important;
+    padding-bottom: calc(
+      var(--now-playing-bar-height) +
+      env(safe-area-inset-bottom, 0px) +
+      var(--viewport-bottom-offset)
+    ) !important;
   }
 }
 @media (max-width: 600px) {
+  :root {
+    --now-playing-bar-height: 210px;
+  }
   .now-playing-bar-padding {
-    padding-bottom: 210px !important;
+    padding-bottom: calc(
+      var(--now-playing-bar-height) +
+      env(safe-area-inset-bottom, 0px) +
+      var(--viewport-bottom-offset)
+    ) !important;
   }
 }
 .app-background {
